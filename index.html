@@ -53,6 +53,7 @@
   .brand .tag{
     font-size:11px; color:var(--text-dim); font-family:var(--mono);
   }
+  .stat-group{ display:flex; align-items:center; gap:8px; }
   .stat{
     font-family: var(--mono); font-size:12px; color:var(--text-dim);
     background:var(--bg-panel); border:1px solid var(--line);
@@ -122,7 +123,10 @@
       <div class="k"><span class="dot-r">k</span>place</div>
       <div class="tag">/// KOREA ONLY /// pixel canvas</div>
     </div>
-    <div class="stat">칠해진 픽셀 <b id="pixel-count">0</b></div>
+    <div class="stat-group">
+      <div class="stat">칠해진 픽셀 <b id="pixel-count">0</b></div>
+      <div class="stat" id="distance-stat">활천초→돗대산 <b id="distance-value">-</b></div>
+    </div>
   </header>
 
   <div id="zoom-hint">그리드가 안 보이면 더 확대(zoom in)하세요</div>
@@ -156,6 +160,7 @@
    - 지도: 카카오맵, 한국 영역으로 bounds 제한
    - 픽셀 그리드: 위경도를 고정 셀 크기로 스냅해서 사각형 격자를 만듦
    - 저장: localStorage (프로토타입용). 실서비스는 반드시 서버/실시간 DB로 교체할 것.
+   - 거리 표시: 활천초 -> 돗대산 두 지점 사이 직선거리 (좌표는 근사치, 필요시 보정)
    ============================================================ */
 
 const CELL_DEG = 0.0015; // 픽셀 한 칸의 위경도 크기 (약 150m 내외, 필요시 조정)
@@ -199,6 +204,15 @@ function snap(lat, lng){
   return { lat: sLat, lng: sLng, key: sLat.toFixed(6) + "_" + sLng.toFixed(6) };
 }
 
+// ---------- 두 좌표 사이 직선거리 계산 (Haversine) ----------
+function getDistance(a, b){
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (b.getLat() - a.getLat()) * rad;
+  const dLng = (b.getLng() - a.getLng()) * rad;
+  const x = Math.sin(dLat/2)**2 + Math.cos(a.getLat()*rad) * Math.cos(b.getLat()*rad) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
 // ---------- 지도 초기화 ----------
 if (typeof kakao === 'undefined'){
   document.getElementById('fatal-error').style.display = 'flex';
@@ -217,6 +231,26 @@ kakao.maps.load(function(){
     new kakao.maps.LatLng(KOREA_BOUNDS.swLat, KOREA_BOUNDS.swLng),
     new kakao.maps.LatLng(KOREA_BOUNDS.neLat, KOREA_BOUNDS.neLng)
   );
+
+  // ---- 활천초 -> 돗대산 거리 표시 ----
+  const startPos = new kakao.maps.LatLng(35.2287, 128.8395); // 김해 활천초 (근사 좌표)
+  const endPos   = new kakao.maps.LatLng(35.1975, 128.9130); // 돗대산 (근사 좌표)
+
+  new kakao.maps.Marker({ position: startPos, map: map });
+  new kakao.maps.Marker({ position: endPos, map: map });
+
+  new kakao.maps.Polyline({
+    path: [startPos, endPos],
+    strokeWeight: 4,
+    strokeColor: '#DB4455',
+    strokeOpacity: 0.9,
+    strokeStyle: 'solid'
+  }).setMap(map);
+
+  const dist = getDistance(startPos, endPos);
+  const distText = dist >= 1000 ? (dist / 1000).toFixed(2) + 'km' : Math.round(dist) + 'm';
+  document.getElementById('distance-value').textContent = distText;
+  // ---- 여기까지 거리 표시 ----
 
   // 한국 밖으로 못 나가게: 이동 끝날 때마다 bounds 안으로 되돌림
   kakao.maps.event.addListener(map, 'dragend', clampToKorea);
@@ -371,6 +405,5 @@ function showToast(msg){
   toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
 }
 </script>
-
 </body>
 </html>
